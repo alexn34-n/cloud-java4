@@ -1,22 +1,22 @@
 package io;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.net.Socket;
 
 public class Handler implements Runnable {
 
+    private static final int BUFFER_SIZE=1024;
     private String serverDir = "./";
     private String userName;
     private final IoFileCommandServer server;
     private  final Socket socket;
+    private final byte[] buffer;
 
     public Handler(IoFileCommandServer server, Socket socket) {
         this.server = server;
         this.socket = socket;
         userName="user";
+        buffer=new byte[BUFFER_SIZE];
     }
 
 
@@ -38,7 +38,7 @@ public class Handler implements Runnable {
                         }
                         sb.append(file.getName()).append(" | ");
                         if(file.isFile()) {
-                            sb.append("[FILE] | ").append(file.length()).append("bytes\n");
+                            sb.append("[FILE] | ").append(file.length()).append(" bytes.\n");
                         }else {
                             sb.append("[DIR]\n");
                         }
@@ -46,7 +46,6 @@ public class Handler implements Runnable {
                     }
                     os.writeUTF(sb.toString());
                     os.flush();
-
                 } else if (message.startsWith("cd ")) {
                     String path = message.split(" ", 2)[1];
                     File dir = new File(path);
@@ -58,19 +57,37 @@ public class Handler implements Runnable {
                     } else if(path.equals("..")) {
                         serverDir=new File(serverDir).getParent();
                     }
-
                     else{
                         os.writeUTF("user: wrong path\n");
                         os.flush();
                     }
-
                 }
-
                 else if (message.equals("/quit")) {
                     os.writeUTF(message);
                     os.flush();
                     break;
-                }else{
+                } else if (message.startsWith("getFile")){
+                    String[] data=message.split(" +");
+                    String fileName=data[1];
+                    File file=new File(serverDir+fileName);
+                    if(!file.exists()){
+                        os.writeUTF("user: File not exists\n");
+                        os.flush();
+                    }else{
+                        os.writeUTF("file");
+                        os.writeUTF(fileName);
+                    long length=file.length();
+                    os.writeLong(length);
+                    try(FileInputStream fis=new FileInputStream(serverDir+fileName)) {
+                        int read;
+                        while ((read=fis.read(buffer))!=-1) {
+                            os.write(buffer,0,read);
+                        }
+                    }
+                    }
+                    os.flush();
+                }
+                else{
                     os.writeUTF("user: UNKNOWN COMMAND\n");
                     os.flush();
                 }
